@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { Variable } from '../../types';
 
@@ -113,52 +113,35 @@ const VariableItem: React.FC<VariableEditorProps> = ({ variable, onUpdate, onDel
   );
 };
 
-export const VariableEditor: React.FC = () => {
-  const { state, actions } = useApp();
-  const [showAddGlobal, setShowAddGlobal] = useState(false);
-  const [showAddLocal, setShowAddLocal] = useState(false);
-  const [newKey, setNewKey] = useState('');
-  const [newValue, setNewValue] = useState('');
-  const [newIsOutput, setNewIsOutput] = useState(false);
+interface AddVariableFormProps {
+  isGlobal: boolean;
+  onCancel: () => void;
+  onSubmit: (key: string, value: string, isOutput: boolean) => void;
+}
 
-  const currentFile = state.project.files.find(f => f.id === state.currentFileId);
+const AddVariableForm: React.FC<AddVariableFormProps> = ({ isGlobal, onCancel, onSubmit }) => {
+  const [localKey, setLocalKey] = useState('');
+  const [localValue, setLocalValue] = useState('');
+  const [localIsOutput, setLocalIsOutput] = useState(false);
 
-  const handleAddVariable = (isGlobal: boolean) => {
-    if (!newKey.trim()) return;
-
-    actions.addVariable(
-      isGlobal ? null : state.currentFileId,
-      newKey.trim(),
-      newValue.trim(),
-      newIsOutput
-    );
-
+  const handleSubmit = () => {
+    if (!localKey.trim()) return;
+    onSubmit(localKey.trim(), localValue.trim(), localIsOutput);
+    
     // Reset form
-    setNewKey('');
-    setNewValue('');
-    setNewIsOutput(false);
-    setShowAddGlobal(false);
-    setShowAddLocal(false);
+    setLocalKey('');
+    setLocalValue('');
+    setLocalIsOutput(false);
   };
 
-  const handleUpdateVariable = (fileId: string | null, variableId: string, updates: Partial<Variable>) => {
-    actions.updateVariable(fileId, variableId, updates);
-  };
-
-  const handleDeleteVariable = (fileId: string | null, variableId: string) => {
-    if (window.confirm('Delete this variable?')) {
-      actions.deleteVariable(fileId, variableId);
-    }
-  };
-
-  const AddVariableForm: React.FC<{ isGlobal: boolean; onCancel: () => void }> = ({ isGlobal, onCancel }) => (
+  return (
     <div className="bg-gray-50 p-3 rounded border space-y-2">
       <div>
         <label className="text-xs font-medium text-gray-700">Variable Key</label>
         <input
           type="text"
-          value={newKey}
-          onChange={(e) => setNewKey(e.target.value)}
+          value={localKey}
+          onChange={(e) => setLocalKey(e.target.value)}
           className="w-full text-sm border border-gray-300 rounded px-2 py-1 mt-1"
           placeholder="variable_name"
           autoFocus
@@ -167,8 +150,8 @@ export const VariableEditor: React.FC = () => {
       <div>
         <label className="text-xs font-medium text-gray-700">Value</label>
         <textarea
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
+          value={localValue}
+          onChange={(e) => setLocalValue(e.target.value)}
           className="w-full text-sm border border-gray-300 rounded px-2 py-1 mt-1 resize-none"
           rows={2}
           placeholder="Variable value..."
@@ -178,8 +161,8 @@ export const VariableEditor: React.FC = () => {
         <label className="flex items-center text-xs">
           <input
             type="checkbox"
-            checked={newIsOutput}
-            onChange={(e) => setNewIsOutput(e.target.checked)}
+            checked={localIsOutput}
+            onChange={(e) => setLocalIsOutput(e.target.checked)}
             className="mr-1"
           />
           AI Output Variable
@@ -187,9 +170,9 @@ export const VariableEditor: React.FC = () => {
       </div>
       <div className="flex space-x-2">
         <button
-          onClick={() => handleAddVariable(isGlobal)}
+          onClick={handleSubmit}
           className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700"
-          disabled={!newKey.trim()}
+          disabled={!localKey.trim()}
         >
           Add Variable
         </button>
@@ -202,6 +185,34 @@ export const VariableEditor: React.FC = () => {
       </div>
     </div>
   );
+};
+
+export const VariableEditor: React.FC = () => {
+  const { state, actions } = useApp();
+  const [showAddGlobal, setShowAddGlobal] = useState(false);
+  const [showAddLocal, setShowAddLocal] = useState(false);
+
+  const currentFile = state.project.files.find(f => f.id === state.currentFileId);
+
+  const handleUpdateVariable = (fileId: string | null, variableId: string, updates: Partial<Variable>) => {
+    actions.updateVariable(fileId, variableId, updates);
+  };
+
+  const handleDeleteVariable = (fileId: string | null, variableId: string) => {
+    if (window.confirm('Delete this variable?')) {
+      actions.deleteVariable(fileId, variableId);
+    }
+  };
+
+  const handleAddGlobalVariable = (key: string, value: string, isOutput: boolean) => {
+    actions.addVariable(null, key, value, isOutput);
+    setShowAddGlobal(false);
+  };
+
+  const handleAddLocalVariable = (key: string, value: string, isOutput: boolean) => {
+    actions.addVariable(state.currentFileId, key, value, isOutput);
+    setShowAddLocal(false);
+  };
 
   return (
     <div className="p-4 space-y-6">
@@ -223,12 +234,8 @@ export const VariableEditor: React.FC = () => {
           <div className="mb-2">
             <AddVariableForm
               isGlobal={true}
-              onCancel={() => {
-                setShowAddGlobal(false);
-                setNewKey('');
-                setNewValue('');
-                setNewIsOutput(false);
-              }}
+              onCancel={() => setShowAddGlobal(false)}
+              onSubmit={handleAddGlobalVariable}
             />
           </div>
         )}
@@ -267,12 +274,8 @@ export const VariableEditor: React.FC = () => {
             <div className="mb-2">
               <AddVariableForm
                 isGlobal={false}
-                onCancel={() => {
-                  setShowAddLocal(false);
-                  setNewKey('');
-                  setNewValue('');
-                  setNewIsOutput(false);
-                }}
+                onCancel={() => setShowAddLocal(false)}
+                onSubmit={handleAddLocalVariable}
               />
             </div>
           )}

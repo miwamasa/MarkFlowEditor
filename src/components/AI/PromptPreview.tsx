@@ -32,59 +32,12 @@ export const PromptPreview: React.FC<PromptPreviewProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-          {/* Markdown Content Section */}
-          {markdownContent && markdownContent.trim() && (
-            <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">
-                📝 Current Markdown Content
-              </h4>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4 max-h-40 overflow-auto">
-                <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                  {markdownContent}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* JSON Schema Section */}
-          <div>
-            <h4 className="text-md font-medium text-gray-800 mb-2">
-              📋 JSON Schema
-            </h4>
-            <div className="bg-gray-50 border rounded-lg p-4 max-h-60 overflow-auto">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                {schema}
-              </pre>
-            </div>
-          </div>
-
-          {/* Generated Prompt Section */}
-          <div>
-            <h4 className="text-md font-medium text-gray-800 mb-2">
-              🤖 Generated Prompt
-            </h4>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-h-60 overflow-auto">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                {prompt}
-              </pre>
-            </div>
-          </div>
-
-          {/* Info Section */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-start">
-              <div className="text-yellow-600 mr-2">💡</div>
-              <div className="text-sm text-yellow-800">
-                <p className="font-medium mb-1">How this works:</p>
-                <ul className="list-disc ml-4 space-y-1">
-                  <li>The JSON schema defines the expected structure of the AI response</li>
-                  <li>The prompt instructs the AI to generate content matching this schema</li>
-                  <li>All responses must include a "variables" key with the generated values</li>
-                  <li>Variables with the same name will be updated automatically</li>
-                </ul>
-              </div>
-            </div>
+        <div className="flex-1 overflow-auto p-4">
+          {/* Generated Prompt Section Only */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 h-full overflow-auto">
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+              {prompt}
+            </pre>
           </div>
         </div>
 
