@@ -9,6 +9,7 @@ export const Sidebar: React.FC = () => {
   const [newFileName, setNewFileName] = useState('');
   const [isCreatingFile, setIsCreatingFile] = useState(false);
   const [showBlockSelector, setShowBlockSelector] = useState(false);
+  const [draggedFileIndex, setDraggedFileIndex] = useState<number | null>(null);
 
   // Helper function to safely format dates
   const formatDate = (dateValue: Date | string): string => {
@@ -42,6 +43,29 @@ export const Sidebar: React.FC = () => {
     if (state.currentFileId) {
       actions.embedBlock(state.currentFileId, sourceFileId, sourceBlockId);
     }
+  };
+
+  const handleDragStart = (e: React.DragEvent, fileIndex: number) => {
+    setDraggedFileIndex(fileIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', fileIndex.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedFileIndex !== null && draggedFileIndex !== dropIndex) {
+      actions.reorderFiles(draggedFileIndex, dropIndex);
+    }
+    setDraggedFileIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedFileIndex(null);
   };
 
   return (
@@ -130,23 +154,37 @@ export const Sidebar: React.FC = () => {
             )}
 
             <div className="space-y-2">
-              {state.project.files.map(file => (
+              {state.project.files.map((file, index) => (
                 <div
                   key={file.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
                   onClick={() => handleFileSelect(file.id)}
-                  className={`p-3 rounded cursor-pointer transition-colors ${
-                    state.currentFileId === file.id
+                  className={`p-3 rounded cursor-pointer transition-colors select-none ${
+                    draggedFileIndex === index
+                      ? 'opacity-50'
+                      : draggedFileIndex !== null
+                      ? 'bg-gray-50 border-2 border-dashed border-blue-300'
+                      : state.currentFileId === file.id
                       ? 'bg-blue-100 border border-blue-200'
                       : 'bg-white hover:bg-gray-100 border border-gray-200'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">
-                        📄 {file.name}
+                    <div className="flex items-center flex-1">
+                      <div className="text-gray-400 mr-2 cursor-grab active:cursor-grabbing" title="Drag to reorder">
+                        ⋮⋮
                       </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        {file.blocks.length} blocks • {file.localVariables.length} variables
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          📄 {file.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {file.blocks.length} blocks • {file.localVariables.length} variables
+                        </div>
                       </div>
                     </div>
                     <button

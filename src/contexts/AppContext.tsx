@@ -10,6 +10,7 @@ interface AppContextType {
     createFile: (name: string) => void;
     updateFile: (fileId: string, updates: Partial<FileData>) => void;
     deleteFile: (fileId: string) => void;
+    reorderFiles: (fromIndex: number, toIndex: number) => void;
     setCurrentFile: (fileId: string | null) => void;
     addBlock: (fileId: string, type: BlockType, position?: number) => void;
     updateBlock: (fileId: string, blockId: string, updates: Partial<Block>) => void;
@@ -36,6 +37,7 @@ type Action =
   | { type: 'CREATE_FILE'; payload: FileData }
   | { type: 'UPDATE_FILE'; payload: { fileId: string; updates: Partial<FileData> } }
   | { type: 'DELETE_FILE'; payload: string }
+  | { type: 'REORDER_FILES'; payload: { fromIndex: number; toIndex: number } }
   | { type: 'SET_CURRENT_FILE'; payload: string | null }
   | { type: 'ADD_BLOCK'; payload: { fileId: string; block: Block; position?: number } }
   | { type: 'UPDATE_BLOCK'; payload: { fileId: string; blockId: string; updates: Partial<Block> } }
@@ -151,6 +153,26 @@ function appReducer(state: AppState, action: Action): AppState {
           }
         },
         currentFileId: state.currentFileId === action.payload ? null : state.currentFileId,
+        saveStatus: 'unsaved'
+      };
+
+    case 'REORDER_FILES':
+      const { fromIndex, toIndex } = action.payload;
+      const files = [...state.project.files];
+      const [movedFile] = files.splice(fromIndex, 1);
+      files.splice(toIndex, 0, movedFile);
+      
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          files,
+          updatedAt: new Date(),
+          metadata: {
+            ...state.project.metadata,
+            updatedAt: new Date()
+          }
+        },
         saveStatus: 'unsaved'
       };
     
@@ -533,6 +555,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     deleteFile: (fileId: string) => {
       dispatch({ type: 'DELETE_FILE', payload: fileId });
+    },
+
+    reorderFiles: (fromIndex: number, toIndex: number) => {
+      dispatch({ type: 'REORDER_FILES', payload: { fromIndex, toIndex } });
     },
 
     setCurrentFile: (fileId: string | null) => {
