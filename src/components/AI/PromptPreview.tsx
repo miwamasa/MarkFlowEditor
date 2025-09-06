@@ -18,8 +18,8 @@ export const PromptPreview: React.FC<PromptPreviewProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-full flex flex-col">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-hidden">
+      <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] min-h-[400px] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b flex-shrink-0">
           <h3 className="text-lg font-medium text-gray-900">
             👁️ Prompt Preview
@@ -52,8 +52,8 @@ export const PromptPreview: React.FC<PromptPreviewProps> = ({
             <h4 className="text-md font-medium text-gray-800 mb-2">
               📋 JSON Schema
             </h4>
-            <div className="bg-gray-50 border rounded-lg p-4">
-              <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto">
+            <div className="bg-gray-50 border rounded-lg p-4 max-h-60 overflow-auto">
+              <pre className="text-sm text-gray-700 whitespace-pre-wrap">
                 {schema}
               </pre>
             </div>
@@ -64,7 +64,7 @@ export const PromptPreview: React.FC<PromptPreviewProps> = ({
             <h4 className="text-md font-medium text-gray-800 mb-2">
               🤖 Generated Prompt
             </h4>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-h-60 overflow-auto">
               <pre className="text-sm text-gray-700 whitespace-pre-wrap">
                 {prompt}
               </pre>
