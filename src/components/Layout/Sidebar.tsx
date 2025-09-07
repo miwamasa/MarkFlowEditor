@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { VariableEditor } from '../Variables/VariableEditor';
-import { BlockSelector } from '../Editor/BlockSelector';
 
 export const Sidebar: React.FC = () => {
   const { state, actions } = useApp();
   const [activeTab, setActiveTab] = useState<'files' | 'variables' | 'inspector'>('files');
   const [newFileName, setNewFileName] = useState('');
   const [isCreatingFile, setIsCreatingFile] = useState(false);
-  const [showBlockSelector, setShowBlockSelector] = useState(false);
   const [draggedFileIndex, setDraggedFileIndex] = useState<number | null>(null);
+  const [selectedBlocks, setSelectedBlocks] = useState<{fileId: string, blockId: string, fileName: string, blockName: string}[]>([]);
 
   // Helper function to safely format dates
   const formatDate = (dateValue: Date | string): string => {
@@ -39,10 +38,43 @@ export const Sidebar: React.FC = () => {
   const currentFile = state.project.files.find(f => f.id === state.currentFileId);
   const selectedBlock = currentFile?.blocks.find(b => b.id === state.selectedBlockId);
 
-  const handleEmbedBlock = (sourceFileId: string, sourceBlockId: string) => {
-    if (state.currentFileId) {
-      actions.embedBlock(state.currentFileId, sourceFileId, sourceBlockId);
+  const handleBlockToggle = (fileId: string, blockId: string, fileName: string, blockName: string) => {
+    const blockKey = `${fileId}-${blockId}`;
+    const isSelected = selectedBlocks.some(b => `${b.fileId}-${b.blockId}` === blockKey);
+    
+    if (isSelected) {
+      setSelectedBlocks(prev => prev.filter(b => `${b.fileId}-${b.blockId}` !== blockKey));
+    } else {
+      setSelectedBlocks(prev => [...prev, { fileId, blockId, fileName, blockName }]);
     }
+  };
+
+  const handleEmbedSelected = () => {
+    if (!state.currentFileId || selectedBlocks.length === 0) return;
+    
+    if (selectedBlocks.length > 1) {
+      // Use batch embedding for multiple blocks
+      const blocks = selectedBlocks.map(block => ({
+        sourceFileId: block.fileId,
+        sourceBlockId: block.blockId
+      }));
+      actions.embedMultipleBlocks(state.currentFileId, blocks);
+    } else {
+      // Single block embedding
+      const block = selectedBlocks[0];
+      actions.embedBlock(state.currentFileId, block.fileId, block.blockId);
+    }
+    
+    // Clear selections after embedding
+    setSelectedBlocks([]);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedBlocks([]);
+  };
+
+  const isBlockSelected = (fileId: string, blockId: string) => {
+    return selectedBlocks.some(b => b.fileId === fileId && b.blockId === blockId);
   };
 
   const handleDragStart = (e: React.DragEvent, fileIndex: number) => {
@@ -104,23 +136,47 @@ export const Sidebar: React.FC = () => {
           <div className="p-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-medium text-gray-900">Project Files</h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setShowBlockSelector(true)}
-                  className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
-                  disabled={!state.currentFileId}
-                  title="Embed block from another file"
-                >
-                  🔗 Embed
-                </button>
-                <button
-                  onClick={() => setIsCreatingFile(true)}
-                  className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
-                >
-                  + New File
-                </button>
-              </div>
+              <button
+                onClick={() => setIsCreatingFile(true)}
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+              >
+                + New File
+              </button>
             </div>
+
+            {/* Selected blocks control area */}
+            {selectedBlocks.length > 0 && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-800">
+                    {selectedBlocks.length} blocks selected for embedding
+                  </span>
+                </div>
+                <div className="text-xs text-blue-600 mb-3">
+                  {selectedBlocks.map(b => `${b.fileName}/${b.blockName}`).join(', ')}
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleEmbedSelected}
+                    disabled={!state.currentFileId}
+                    className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    🔗 Embed Selected ({selectedBlocks.length})
+                  </button>
+                  <button
+                    onClick={handleClearSelection}
+                    className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                  >
+                    Clear
+                  </button>
+                </div>
+                {!state.currentFileId && (
+                  <div className="text-xs text-red-600 mt-1">
+                    Please select a target file first
+                  </div>
+                )}
+              </div>
+            )}
 
             {isCreatingFile && (
               <div className="mb-4 p-3 bg-white rounded border">
@@ -200,30 +256,46 @@ export const Sidebar: React.FC = () => {
                     <div className="mt-2 ml-4 space-y-1">
                       {file.blocks
                         .filter(block => block.name)
-                        .map(block => (
-                          <div
-                            key={block.id}
-                            className="text-xs text-gray-600 flex items-center justify-between group"
-                          >
-                            <div className="flex items-center">
-                              <span className="mr-1">🔗</span>
-                              {block.name}
-                              <span className="ml-1 text-gray-400">({block.type})</span>
+                        .map(block => {
+                          const isSelected = isBlockSelected(file.id, block.id);
+                          const isCurrentFile = file.id === state.currentFileId;
+                          
+                          return (
+                            <div
+                              key={block.id}
+                              className={`text-xs flex items-center justify-between group p-1 rounded transition-colors ${
+                                isSelected ? 'bg-green-100' : 'hover:bg-gray-100'
+                              }`}
+                            >
+                              <div className="flex items-center flex-1">
+                                {!isCurrentFile && (
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleBlockToggle(file.id, block.id, file.name, block.name || `${block.type} block`)}
+                                    className="mr-2 h-3 w-3 text-green-600 rounded border-gray-300"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                )}
+                                <span className="mr-1">🔗</span>
+                                <span className={`${isSelected ? 'text-green-700 font-medium' : 'text-gray-600'}`}>
+                                  {block.name}
+                                </span>
+                                <span className="ml-1 text-gray-400">({block.type})</span>
+                                {isSelected && (
+                                  <span className="ml-2 text-xs bg-green-200 text-green-800 px-1 rounded">
+                                    Selected
+                                  </span>
+                                )}
+                              </div>
+                              {isCurrentFile && (
+                                <span className="text-xs text-gray-500">
+                                  Current file
+                                </span>
+                              )}
                             </div>
-                            {file.id !== state.currentFileId && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEmbedBlock(file.id, block.id);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity bg-blue-600 text-white px-1 py-0.5 rounded text-xs hover:bg-blue-700"
-                                title={`Embed "${block.name}" in current file`}
-                              >
-                                📎
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -296,13 +368,6 @@ export const Sidebar: React.FC = () => {
           </div>
         )}
       </div>
-      
-      {/* Block Selector Modal */}
-      <BlockSelector
-        isOpen={showBlockSelector}
-        onClose={() => setShowBlockSelector(false)}
-        onSelectBlock={handleEmbedBlock}
-      />
     </div>
   );
 };

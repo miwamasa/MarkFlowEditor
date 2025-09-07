@@ -26,6 +26,7 @@ interface AppContextType {
     setLoading: (loading: boolean) => void;
     setSaveStatus: (status: 'saved' | 'saving' | 'unsaved') => void;
     embedBlock: (targetFileId: string, sourceFileId: string, sourceBlockId: string, position?: number) => void;
+    embedMultipleBlocks: (targetFileId: string, blocks: { sourceFileId: string; sourceBlockId: string }[]) => void;
     inlineEmbeddedBlock: (fileId: string, embedBlockId: string) => void;
   };
 }
@@ -52,6 +53,7 @@ type Action =
   | { type: 'CLEAR_ERROR' }
   | { type: 'SET_SAVE_STATUS'; payload: 'saved' | 'saving' | 'unsaved' }
   | { type: 'EMBED_BLOCK'; payload: { targetFileId: string; sourceFileId: string; sourceBlockId: string; position?: number } }
+  | { type: 'EMBED_MULTIPLE_BLOCKS'; payload: { targetFileId: string; blocks: { sourceFileId: string; sourceBlockId: string }[] } }
   | { type: 'INLINE_EMBEDDED_BLOCK'; payload: { fileId: string; embedBlockId: string } };
 
 const createDefaultProject = (): ProjectData => {
@@ -450,6 +452,41 @@ function appReducer(state: AppState, action: Action): AppState {
         saveStatus: 'unsaved'
       };
     
+    case 'EMBED_MULTIPLE_BLOCKS':
+      const newEmbedBlocks: Block[] = action.payload.blocks.map(({ sourceFileId, sourceBlockId }) => ({
+        id: crypto.randomUUID(),
+        type: BlockType.Embed,
+        content: {
+          sourceFileId,
+          sourceBlockId,
+          isLinked: true
+        } as EmbedData,
+        metadata: {
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          version: 1
+        }
+      }));
+      
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          files: state.project.files.map(file => {
+            if (file.id === action.payload.targetFileId) {
+              return {
+                ...file,
+                blocks: [...file.blocks, ...newEmbedBlocks],
+                updatedAt: new Date()
+              };
+            }
+            return file;
+          }),
+          updatedAt: new Date()
+        },
+        saveStatus: 'unsaved'
+      };
+    
     case 'INLINE_EMBEDDED_BLOCK':
       return {
         ...state,
@@ -656,6 +693,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatch({ 
         type: 'EMBED_BLOCK', 
         payload: { targetFileId, sourceFileId, sourceBlockId, position } 
+      });
+    },
+    embedMultipleBlocks: (targetFileId: string, blocks: { sourceFileId: string; sourceBlockId: string }[]) => {
+      dispatch({ 
+        type: 'EMBED_MULTIPLE_BLOCKS', 
+        payload: { targetFileId, blocks } 
       });
     },
     inlineEmbeddedBlock: (fileId: string, embedBlockId: string) => {
