@@ -51,7 +51,7 @@ const VariableItem: React.FC<VariableEditorProps> = ({ variable, onUpdate, onDel
             placeholder="Variable value..."
           />
         </div>
-        <div>
+        <div className="space-y-2">
           <label className="flex items-center text-xs">
             <input
               type="checkbox"
@@ -61,6 +61,19 @@ const VariableItem: React.FC<VariableEditorProps> = ({ variable, onUpdate, onDel
             />
             AI Output Variable
           </label>
+          
+          <div>
+            <label className="text-xs font-medium text-gray-500">Visibility</label>
+            <select
+              value={variable.visibility || 'public'}
+              onChange={(e) => onUpdate({ visibility: e.target.value as 'public' | 'private' | 'protected' })}
+              className="w-full text-xs border border-gray-300 rounded px-2 py-1 mt-1"
+            >
+              <option value="public">🌐 Public (accessible from all files)</option>
+              <option value="protected">🛡️ Protected (same directory)</option>
+              <option value="private">🔒 Private (this file only)</option>
+            </select>
+          </div>
         </div>
         <div className="flex space-x-2">
           <button
@@ -104,11 +117,20 @@ const VariableItem: React.FC<VariableEditorProps> = ({ variable, onUpdate, onDel
       <div className="text-gray-600 text-xs break-words">
         {variable.value || '(empty)'}
       </div>
-      {variable.isOutput && (
-        <div className="text-blue-600 text-xs mt-1">
-          ⚡ AI Output Variable
+      <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center space-x-2">
+          {variable.isOutput && (
+            <span className="text-blue-600 text-xs">
+              ⚡ AI Output
+            </span>
+          )}
+          <span className="text-xs text-gray-400">
+            {variable.visibility === 'private' && '🔒 Private'}
+            {variable.visibility === 'protected' && '🛡️ Protected'}
+            {(!variable.visibility || variable.visibility === 'public') && '🌐 Public'}
+          </span>
         </div>
-      )}
+      </div>
     </div>
   );
 };
@@ -116,22 +138,24 @@ const VariableItem: React.FC<VariableEditorProps> = ({ variable, onUpdate, onDel
 interface AddVariableFormProps {
   isGlobal: boolean;
   onCancel: () => void;
-  onSubmit: (key: string, value: string, isOutput: boolean) => void;
+  onSubmit: (key: string, value: string, isOutput: boolean, visibility?: 'public' | 'private' | 'protected') => void;
 }
 
 const AddVariableForm: React.FC<AddVariableFormProps> = ({ isGlobal, onCancel, onSubmit }) => {
   const [localKey, setLocalKey] = useState('');
   const [localValue, setLocalValue] = useState('');
   const [localIsOutput, setLocalIsOutput] = useState(false);
+  const [localVisibility, setLocalVisibility] = useState<'public' | 'private' | 'protected'>('public');
 
   const handleSubmit = () => {
     if (!localKey.trim()) return;
-    onSubmit(localKey.trim(), localValue.trim(), localIsOutput);
+    onSubmit(localKey.trim(), localValue.trim(), localIsOutput, localVisibility);
     
     // Reset form
     setLocalKey('');
     setLocalValue('');
     setLocalIsOutput(false);
+    setLocalVisibility('public');
   };
 
   return (
@@ -157,7 +181,7 @@ const AddVariableForm: React.FC<AddVariableFormProps> = ({ isGlobal, onCancel, o
           placeholder="Variable value..."
         />
       </div>
-      <div>
+      <div className="space-y-2">
         <label className="flex items-center text-xs">
           <input
             type="checkbox"
@@ -167,6 +191,19 @@ const AddVariableForm: React.FC<AddVariableFormProps> = ({ isGlobal, onCancel, o
           />
           AI Output Variable
         </label>
+        
+        <div>
+          <label className="text-xs font-medium text-gray-700">Visibility</label>
+          <select
+            value={localVisibility}
+            onChange={(e) => setLocalVisibility(e.target.value as 'public' | 'private' | 'protected')}
+            className="w-full text-xs border border-gray-300 rounded px-2 py-1 mt-1"
+          >
+            <option value="public">🌐 Public (accessible from all files)</option>
+            <option value="protected">🛡️ Protected (same directory)</option>
+            <option value="private">🔒 Private (this file only)</option>
+          </select>
+        </div>
       </div>
       <div className="flex space-x-2">
         <button
@@ -204,19 +241,24 @@ export const VariableEditor: React.FC = () => {
     }
   };
 
-  const handleAddGlobalVariable = (key: string, value: string, isOutput: boolean) => {
-    actions.addVariable(null, key, value, isOutput);
+  const handleAddGlobalVariable = (key: string, value: string, isOutput: boolean, visibility?: 'public' | 'private' | 'protected') => {
+    actions.addVariable(null, key, value, isOutput, visibility);
     setShowAddGlobal(false);
   };
 
-  const handleAddLocalVariable = (key: string, value: string, isOutput: boolean) => {
-    actions.addVariable(state.currentFileId, key, value, isOutput);
+  const handleAddLocalVariable = (key: string, value: string, isOutput: boolean, visibility?: 'public' | 'private' | 'protected') => {
+    actions.addVariable(state.currentFileId, key, value, isOutput, visibility);
     setShowAddLocal(false);
   };
 
   return (
     <div className="p-4 space-y-6">
-      <h3 className="font-medium text-gray-900 mb-4">Variables</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="font-medium text-gray-900">Variables</h3>
+        <div className="text-xs text-gray-500">
+          Cross-file references: <code>${'{file:./path/to/file.md:VARIABLE}'}</code> or <code>{'{{filename.variableName}}'}</code>
+        </div>
+      </div>
       
       {/* Global Variables */}
       <div>

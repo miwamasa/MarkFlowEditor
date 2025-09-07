@@ -62,7 +62,30 @@ export interface Variable {
   value: string;
   isOutput?: boolean;
   description?: string;
+  visibility?: 'public' | 'private' | 'protected';
   metadata: VariableMetadata;
+}
+
+export interface CrossFileVariableRef {
+  syntax: 'file-path' | 'filename';
+  filePath: string;
+  variableName: string;
+  isRelative: boolean;
+  resolvedValue?: string;
+  resolvedFileId?: string;
+  status: 'resolved' | 'pending' | 'error' | 'circular' | 'not-found';
+  error?: string;
+}
+
+export interface FileDependency {
+  sourceFileId: string;
+  targetFileId: string;
+  variableRefs: CrossFileVariableRef[];
+}
+
+export interface DependencyGraph {
+  dependencies: FileDependency[];
+  circularRefs: string[][];
 }
 
 export interface FileMetadata {

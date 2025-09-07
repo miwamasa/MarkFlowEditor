@@ -17,7 +17,7 @@ interface AppContextType {
     deleteBlock: (fileId: string, blockId: string) => void;
     moveBlock: (fileId: string, blockId: string, newPosition: number) => void;
     setSelectedBlock: (blockId: string | null) => void;
-    addVariable: (fileId: string | null, key: string, value: string, isOutput?: boolean) => void;
+    addVariable: (fileId: string | null, key: string, value: string, isOutput?: boolean, visibility?: 'public' | 'private' | 'protected') => void;
     updateVariable: (fileId: string | null, variableId: string, updates: Partial<Variable>) => void;
     deleteVariable: (fileId: string | null, variableId: string) => void;
     updatePreview: () => void;
@@ -609,13 +609,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dispatch({ type: 'SET_SELECTED_BLOCK', payload: blockId });
     },
 
-    addVariable: (fileId: string | null, key: string, value: string, isOutput?: boolean) => {
+    addVariable: (fileId: string | null, key: string, value: string, isOutput?: boolean, visibility?: 'public' | 'private' | 'protected') => {
       const now = new Date();
       const newVariable: Variable = {
         id: crypto.randomUUID(),
         key,
         value,
         isOutput,
+        visibility,
         metadata: {
           createdAt: now,
           updatedAt: now

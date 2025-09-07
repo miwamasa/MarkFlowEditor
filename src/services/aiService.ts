@@ -1,4 +1,5 @@
 import { AIPromptConfig, Variable } from '../types';
+import { crossFileVariableService } from './crossFileVariableService';
 
 export class AIService {
   private apiKey: string | null = null;
@@ -555,7 +556,10 @@ export class AIService {
   private resolveVariables(content: string, file: any, projectData: any): string {
     let resolved = content;
     
-    // Combine global and local variables
+    // First, resolve cross-file variable references
+    resolved = crossFileVariableService.resolveContent(resolved, file.id, projectData);
+    
+    // Then resolve regular {{variable}} patterns
     const allVariables = [
       ...(projectData.globalVariables || []),
       ...(file.localVariables || [])

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { Variable, BlockType, TableData, EmbedData } from '../../types';
+import { crossFileVariableService } from '../../services/crossFileVariableService';
 
 export const Preview: React.FC = () => {
   const { state } = useApp();
@@ -10,6 +11,12 @@ export const Preview: React.FC = () => {
   const resolveVariables = useCallback((content: string, variables: Variable[]): string => {
     let resolved = content;
     
+    // First, resolve cross-file variable references if we have a current file
+    if (currentFile) {
+      resolved = crossFileVariableService.resolveContent(resolved, currentFile.id, state.project);
+    }
+    
+    // Then resolve regular {{variable}} patterns
     // Create a map for quick lookup
     const variableMap = new Map(variables.map(v => [v.key, v.value]));
     
@@ -28,7 +35,7 @@ export const Preview: React.FC = () => {
     });
     
     return resolved;
-  }, [state.project.globalVariables]);
+  }, [state.project.globalVariables, state.project, currentFile]);
 
   const markdown = useMemo(() => {
     if (!currentFile) return '';
