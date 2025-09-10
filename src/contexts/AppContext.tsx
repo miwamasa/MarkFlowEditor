@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { AppState, ProjectData, FileData, Block, Variable, BlockType, TableData, EmbedData } from '../types';
 import { storageService } from '../services/storageService';
+import { crossFileVariableService } from '../services/crossFileVariableService';
 
 interface AppContextType {
   state: AppState;
@@ -286,6 +287,9 @@ function appReducer(state: AppState, action: Action): AppState {
       };
     
     case 'ADD_VARIABLE':
+      // Clear cross-file variable cache when adding variables
+      crossFileVariableService.clearCache();
+      
       if (action.payload.fileId) {
         return {
           ...state,
@@ -317,6 +321,9 @@ function appReducer(state: AppState, action: Action): AppState {
       }
     
     case 'UPDATE_VARIABLE':
+      // Clear cross-file variable cache when updating variables
+      crossFileVariableService.clearCache();
+      
       if (action.payload.fileId) {
         return {
           ...state,
@@ -356,6 +363,9 @@ function appReducer(state: AppState, action: Action): AppState {
       }
     
     case 'DELETE_VARIABLE':
+      // Clear cross-file variable cache when deleting variables
+      crossFileVariableService.clearCache();
+      
       if (action.payload.fileId) {
         return {
           ...state,
