@@ -3,7 +3,26 @@ import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../UI/Toast';
 import { AISettings } from '../AI/AISettings';
 import { PromptPreview } from '../AI/PromptPreview';
-import { BlockType } from '../../types';
+import { BlockType, FileData, Variable } from '../../types';
+import { aiService, formatPrompt } from '../../services/aiService';
+
+const DEFAULT_PROMPT_INPUT = 'Generate content based on this schema';
+
+const collectOutputVariables = (globalVariables: Variable[], file: FileData): Variable[] => [
+  ...globalVariables.filter(v => v.isOutput),
+  ...file.localVariables.filter(v => v.isOutput)
+];
+
+/** Schema from the file's first JsonSchema block, else generated from output variables. */
+const deriveSchemaContent = (file: FileData, outputVariables: Variable[]): string => {
+  const schemaBlock = file.blocks.find(b => b.type === BlockType.JsonSchema);
+  const schemaContent = typeof schemaBlock?.content === 'string' ? schemaBlock.content : '';
+
+  if (!schemaContent.trim() && outputVariables.length > 0) {
+    return aiService.generateSchemaFromOutputVariables(outputVariables);
+  }
+  return schemaContent;
+};
 
 export const Header: React.FC = () => {
   const { state, actions } = useApp();
@@ -13,6 +32,19 @@ export const Header: React.FC = () => {
   const [currentPrompt, setCurrentPrompt] = useState('');
   const [currentSchema, setCurrentSchema] = useState('');
   const [currentMarkdown, setCurrentMarkdown] = useState('');
+
+  const getCurrentFile = (): FileData | null => {
+    if (!state.currentFileId) {
+      actions.setError('Please select a file first');
+      return null;
+    }
+    const currentFile = state.project.files.find(f => f.id === state.currentFileId);
+    if (!currentFile) {
+      actions.setError('Current file not found');
+      return null;
+    }
+    return currentFile;
+  };
 
   const handleExport = () => {
     try {
@@ -24,7 +56,7 @@ export const Header: React.FC = () => {
       link.download = `${state.project.name || 'markflow-project'}.json`;
       link.click();
       URL.revokeObjectURL(url);
-      
+
       addToast({
         type: 'success',
         title: 'Export Successful',
@@ -57,58 +89,46 @@ export const Header: React.FC = () => {
     reader.readAsText(file);
   };
 
+  const applyResponseVariables = (currentFile: FileData, response: string) => {
+    const { variables } = aiService.parseResponse(response);
+    variables.forEach(variable => {
+      const existingGlobalVar = state.project.globalVariables.find(v => v.key === variable.key);
+      const existingLocalVar = currentFile.localVariables.find(v => v.key === variable.key);
+
+      if (existingGlobalVar) {
+        actions.updateVariable(null, existingGlobalVar.id, {
+          value: variable.value,
+          isOutput: true
+        });
+      } else if (existingLocalVar) {
+        actions.updateVariable(currentFile.id, existingLocalVar.id, {
+          value: variable.value,
+          isOutput: true
+        });
+      } else {
+        actions.addVariable(currentFile.id, variable.key, variable.value, true);
+      }
+    });
+  };
+
   const handleExecutePrompt = async () => {
     if (state.isLoading) return; // Prevent multiple concurrent requests
-    
-    if (!state.currentFileId) {
-      actions.setError('Please select a file first');
-      return;
-    }
 
-    const currentFile = state.project.files.find(f => f.id === state.currentFileId);
-    if (!currentFile) {
-      actions.setError('Current file not found');
-      return;
-    }
+    const currentFile = getCurrentFile();
+    if (!currentFile) return;
 
-    // Find JsonSchema and Output blocks
-    const jsonSchemaBlocks = currentFile.blocks.filter(b => b.type === 'jsonschema');
-    const outputBlocks = currentFile.blocks.filter(b => b.type === 'output');
-
-    // Get output variables (both global and local)
-    const outputVariables = [
-      ...state.project.globalVariables.filter(v => v.isOutput),
-      ...currentFile.localVariables.filter(v => v.isOutput)
-    ];
+    const outputVariables = collectOutputVariables(state.project.globalVariables, currentFile);
 
     try {
       actions.setError(null);
       actions.setLoading(true);
-      
-      // Import AI service dynamically to avoid circular dependencies
-      const { aiService } = await import('../../services/aiService');
-      
-      let schemaContent = '';
-      
-      // Check if we have a JsonSchema block
-      if (jsonSchemaBlocks.length > 0) {
-        const schemaBlock = jsonSchemaBlocks[0];
-        schemaContent = typeof schemaBlock.content === 'string' ? schemaBlock.content : '';
-      }
-      
-      // If no schema block or empty schema, generate from output variables
-      if (!schemaContent.trim() && outputVariables.length > 0) {
-        console.log('📋 Generating schema from output variables:', outputVariables);
-        schemaContent = aiService.generateSchemaFromOutputVariables(outputVariables);
-      }
-      
-      // If still no schema, use default
+
+      const schemaContent = deriveSchemaContent(currentFile, outputVariables);
       if (!schemaContent.trim()) {
         actions.setError('Please add a JsonSchema block or define output variables to structure the AI response');
         return;
       }
-      
-      // Validate API key
+
       if (!aiService.getApiKey()) {
         actions.setError('Please configure your Anthropic API key in AI Settings');
         return;
@@ -116,18 +136,13 @@ export const Header: React.FC = () => {
 
       // Extract current markdown content from file with variable resolution
       const markdownContent = aiService.extractMarkdownFromFile(currentFile, state.project.files, state.project);
-      
-      // Generate prompt from schema with markdown context
-      const promptData = aiService.generatePromptFromSchema(schemaContent, 'Generate content based on this schema', markdownContent, outputVariables);
-      
-      // Extract system instruction and user prompt
-      const systemMatch = promptData.match(/---------- SYSTEM INSTRUCTION ----------\n([\s\S]*?)\n\n---------- USER PROMPT ----------/);
-      const userMatch = promptData.match(/---------- USER PROMPT ----------\n([\s\S]*)$/);
-      
-      const systemInstruction = systemMatch ? systemMatch[1] : 'You are a helpful assistant that generates structured content.';
-      const userPrompt = userMatch ? userMatch[1] : markdownContent || 'Generate content based on this schema';
-      
-      // Execute AI prompt
+      const { systemInstruction, userPrompt } = aiService.generatePromptFromSchema(
+        schemaContent,
+        DEFAULT_PROMPT_INPUT,
+        markdownContent,
+        outputVariables
+      );
+
       const response = await aiService.generateContent(userPrompt, {
         systemInstruction,
         outputVariables: [],
@@ -135,68 +150,27 @@ export const Header: React.FC = () => {
         maxTokens: 1000
       });
 
-      // Find or create an Output block
-      let outputBlock = outputBlocks[0];
-      if (!outputBlock) {
-        // Create a new Output block
-        actions.addBlock(state.currentFileId, BlockType.Output);
-        // Get updated blocks after adding
-        const updatedFile = state.project.files.find(f => f.id === state.currentFileId);
-        const newOutputBlocks = updatedFile?.blocks.filter(b => b.type === BlockType.Output) || [];
-        outputBlock = newOutputBlocks[0];
+      // Write the response into the file's Output block, creating one if needed
+      const outputBlock =
+        currentFile.blocks.find(b => b.type === BlockType.Output) ||
+        actions.addBlock(currentFile.id, BlockType.Output);
+      actions.updateBlock(currentFile.id, outputBlock.id, { content: response });
+
+      try {
+        applyResponseVariables(currentFile, response);
+      } catch (parseError) {
+        console.warn('Could not parse AI response as variables:', parseError);
       }
 
-      if (outputBlock) {
-        // Update the Output block with AI response
-        actions.updateBlock(state.currentFileId, outputBlock.id, { content: response });
-
-        // Parse and create/update variables from response
-        try {
-          const { variables } = aiService.parseResponse(response);
-          variables.forEach(variable => {
-            // Check if variable already exists (both global and local)
-            const existingGlobalVar = state.project.globalVariables.find(v => v.key === variable.key);
-            const existingLocalVar = currentFile.localVariables.find(v => v.key === variable.key);
-            
-            if (existingGlobalVar) {
-              // Update existing global variable
-              actions.updateVariable(null, existingGlobalVar.id, { 
-                value: variable.value,
-                isOutput: true,
-                metadata: { ...existingGlobalVar.metadata, updatedAt: new Date() }
-              });
-              console.log(`🔄 Updated existing global variable: ${variable.key}`);
-            } else if (existingLocalVar) {
-              // Update existing local variable
-              actions.updateVariable(state.currentFileId, existingLocalVar.id, { 
-                value: variable.value,
-                isOutput: true,
-                metadata: { ...existingLocalVar.metadata, updatedAt: new Date() }
-              });
-              console.log(`🔄 Updated existing local variable: ${variable.key}`);
-            } else {
-              // Create new variable
-              actions.addVariable(state.currentFileId, variable.key, variable.value, true);
-              console.log(`➕ Created new variable: ${variable.key}`);
-            }
-          });
-        } catch (parseError) {
-          console.warn('Could not parse AI response as variables:', parseError);
-        }
-      }
-
-      console.log('✅ AI prompt executed successfully');
-      
       addToast({
         type: 'success',
         title: 'AI Execution Successful',
         message: 'AI prompt executed and output generated!'
       });
-      
     } catch (error) {
       console.error('AI Execution Error:', error);
       actions.setError(`AI execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      
+
       addToast({
         type: 'error',
         title: 'AI Execution Failed',
@@ -207,43 +181,14 @@ export const Header: React.FC = () => {
     }
   };
 
-  const handleViewPrompt = async () => {
-    if (!state.currentFileId) {
-      actions.setError('Please select a file first');
-      return;
-    }
-
-    const currentFile = state.project.files.find(f => f.id === state.currentFileId);
-    if (!currentFile) {
-      actions.setError('Current file not found');
-      return;
-    }
+  const handleViewPrompt = () => {
+    const currentFile = getCurrentFile();
+    if (!currentFile) return;
 
     try {
-      // Import AI service
-      const { aiService } = await import('../../services/aiService');
-      
-      // Get output variables (both global and local)
-      const outputVariables = [
-        ...state.project.globalVariables.filter(v => v.isOutput),
-        ...currentFile.localVariables.filter(v => v.isOutput)
-      ];
-      
-      let schemaContent = '';
-      
-      // Check if we have a JsonSchema block
-      const jsonSchemaBlocks = currentFile.blocks.filter(b => b.type === 'jsonschema');
-      if (jsonSchemaBlocks.length > 0) {
-        const schemaBlock = jsonSchemaBlocks[0];
-        schemaContent = typeof schemaBlock.content === 'string' ? schemaBlock.content : '';
-      }
-      
-      // If no schema block or empty schema, generate from output variables
-      if (!schemaContent.trim() && outputVariables.length > 0) {
-        schemaContent = aiService.generateSchemaFromOutputVariables(outputVariables);
-      }
-      
-      // If still no schema, use default
+      const outputVariables = collectOutputVariables(state.project.globalVariables, currentFile);
+
+      let schemaContent = deriveSchemaContent(currentFile, outputVariables);
       if (!schemaContent.trim()) {
         schemaContent = JSON.stringify({
           type: "object",
@@ -260,18 +205,19 @@ export const Header: React.FC = () => {
           }
         }, null, 2);
       }
-      
-      // Extract current markdown content from file with variable resolution
+
       const markdownContent = aiService.extractMarkdownFromFile(currentFile, state.project.files, state.project);
-      
-      // Generate prompt from schema with markdown context
-      const prompt = aiService.generatePromptFromSchema(schemaContent, 'Generate content based on this schema', markdownContent, outputVariables);
-      
+      const promptParts = aiService.generatePromptFromSchema(
+        schemaContent,
+        DEFAULT_PROMPT_INPUT,
+        markdownContent,
+        outputVariables
+      );
+
       setCurrentSchema(schemaContent);
-      setCurrentPrompt(prompt);
+      setCurrentPrompt(formatPrompt(promptParts));
       setCurrentMarkdown(markdownContent);
       setShowPromptPreview(true);
-      
     } catch (error) {
       console.error('Error generating prompt preview:', error);
       actions.setError(`Failed to generate prompt preview: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -373,12 +319,12 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      <AISettings 
+      <AISettings
         isOpen={showAISettings}
         onClose={() => setShowAISettings(false)}
       />
-      
-      <PromptPreview 
+
+      <PromptPreview
         isOpen={showPromptPreview}
         onClose={() => setShowPromptPreview(false)}
         prompt={currentPrompt}
