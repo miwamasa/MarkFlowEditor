@@ -1,5 +1,7 @@
 import { ProjectData, Variable, CrossFileVariableRef, FileDependency, DependencyGraph } from '../types';
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class CrossFileVariableService {
   private dependencyGraph: DependencyGraph = { dependencies: [], circularRefs: [] };
   private resolvedCache = new Map<string, string>();
@@ -102,17 +104,8 @@ export class CrossFileVariableService {
     project: ProjectData
   ): CrossFileVariableRef {
     const cacheKey = `${currentFileId}:${ref.syntax}:${ref.filePath}:${ref.variableName}`;
-    
-    console.log(`[CrossFileVariableService] Resolving reference:`, {
-      syntax: ref.syntax,
-      filePath: ref.filePath,
-      variableName: ref.variableName,
-      currentFileId,
-      cacheKey
-    });
-    
+
     if (this.resolvedCache.has(cacheKey)) {
-      console.log(`[CrossFileVariableService] Found in cache:`, this.resolvedCache.get(cacheKey));
       return {
         ...ref,
         resolvedValue: this.resolvedCache.get(cacheKey),
@@ -122,42 +115,22 @@ export class CrossFileVariableService {
 
     // Resolve target file based on syntax
     let targetFileId: string | null = null;
-    
+
     if (ref.syntax === 'filename') {
       // For {{filename.variableName}}, find file by name (without extension)
       const baseName = ref.filePath.replace(/\.(md|markdown)$/i, '');
-      console.log(`[CrossFileVariableService] Looking for file with basename:`, baseName);
-      console.log(`[CrossFileVariableService] Available files:`, project.files.map(f => ({
-        id: f.id,
-        name: f.name,
-        basename: f.name.replace(/\.(md|markdown)$/i, '')
-      })));
-      
       const targetFile = project.files.find(f => {
         const fileBaseName = f.name.replace(/\.(md|markdown)$/i, '');
         return fileBaseName === baseName;
       });
       targetFileId = targetFile?.id || null;
-      console.log(`[CrossFileVariableService] Target file found:`, targetFile ? { id: targetFile.id, name: targetFile.name } : 'null');
-      
     } else {
       // For ${file:path:VARIABLE}, use existing path resolution
       targetFileId = this.resolveFilePath(currentFileId, ref.filePath, project);
-      console.log(`[CrossFileVariableService] Path-based resolution result:`, targetFileId);
     }
 
-    if (!targetFileId) {
-      console.log(`[CrossFileVariableService] File not found error for:`, ref.filePath);
-      return {
-        ...ref,
-        status: 'error',
-        error: `File not found: ${ref.filePath}`
-      };
-    }
-
-    const targetFile = project.files.find(f => f.id === targetFileId);
-    if (!targetFile) {
-      console.log(`[CrossFileVariableService] Target file ID not found in project:`, targetFileId);
+    const targetFile = targetFileId ? project.files.find(f => f.id === targetFileId) : undefined;
+    if (!targetFileId || !targetFile) {
       return {
         ...ref,
         status: 'error',
@@ -166,35 +139,11 @@ export class CrossFileVariableService {
     }
 
     // Look for variable in target file (local first, then global)
-    console.log(`[CrossFileVariableService] Looking for variable '${ref.variableName}' in target file:`, targetFile.name);
-    console.log(`[CrossFileVariableService] Local variables in target file:`, targetFile.localVariables.map(v => ({
-      id: v.id,
-      key: v.key,
-      value: v.value,
-      isOutput: v.isOutput
-    })));
-    console.log(`[CrossFileVariableService] Global variables:`, project.globalVariables.map(v => ({
-      id: v.id,
-      key: v.key,
-      value: v.value,
-      isOutput: v.isOutput
-    })));
-    
-    let variable = targetFile.localVariables.find(v => v.key === ref.variableName);
-    if (!variable) {
-      variable = project.globalVariables.find(v => v.key === ref.variableName);
-    }
-
-    console.log(`[CrossFileVariableService] Variable found:`, variable ? {
-      id: variable.id,
-      key: variable.key,
-      value: variable.value,
-      isOutput: variable.isOutput,
-      visibility: variable.visibility
-    } : 'null');
+    const variable =
+      targetFile.localVariables.find(v => v.key === ref.variableName) ||
+      project.globalVariables.find(v => v.key === ref.variableName);
 
     if (!variable) {
-      console.log(`[CrossFileVariableService] Variable not found error for:`, ref.variableName);
       return {
         ...ref,
         resolvedFileId: targetFileId,
@@ -203,17 +152,7 @@ export class CrossFileVariableService {
       };
     }
 
-    // Check accessibility
-    const isAccessible = this.isVariableAccessible(variable, currentFileId, targetFileId);
-    console.log(`[CrossFileVariableService] Variable accessibility check:`, {
-      isAccessible,
-      visibility: variable.visibility,
-      sourceFileId: currentFileId,
-      targetFileId
-    });
-    
-    if (!isAccessible) {
-      console.log(`[CrossFileVariableService] Variable not accessible error`);
+    if (!this.isVariableAccessible(variable, currentFileId, targetFileId)) {
       return {
         ...ref,
         resolvedFileId: targetFileId,
@@ -222,11 +161,6 @@ export class CrossFileVariableService {
       };
     }
 
-    // Cache and return resolved value
-    console.log(`[CrossFileVariableService] Successfully resolved variable:`, {
-      value: variable.value,
-      cacheKey
-    });
     this.resolvedCache.set(cacheKey, variable.value);
 
     return {
@@ -249,15 +183,10 @@ export class CrossFileVariableService {
       const resolved = this.resolveCrossFileReference(ref, currentFileId, project);
       
       // Create the appropriate regex pattern based on syntax
-      let pattern: string;
-      if (ref.syntax === 'filename') {
-        // For {{filename.variableName}} syntax
-        pattern = `\\{\\{${ref.filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.${ref.variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\}\\}`;
-      } else {
-        // For ${file:path:VARIABLE} syntax
-        pattern = `\\$\\{file:${ref.filePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:${ref.variableName}\\}`;
-      }
-      
+      const pattern = ref.syntax === 'filename'
+        ? `\\{\\{${escapeRegExp(ref.filePath)}\\.${escapeRegExp(ref.variableName)}\\}\\}`
+        : `\\$\\{file:${escapeRegExp(ref.filePath)}:${ref.variableName}\\}`;
+
       const regex = new RegExp(pattern, 'g');
       
       if (resolved.status === 'resolved' && resolved.resolvedValue) {

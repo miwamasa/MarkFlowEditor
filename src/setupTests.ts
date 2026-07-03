@@ -3,3 +3,9 @@
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
+import { webcrypto } from 'crypto';
+
+// jsdom does not provide the Web Crypto API (crypto.randomUUID)
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, 'crypto', { value: webcrypto });
+}

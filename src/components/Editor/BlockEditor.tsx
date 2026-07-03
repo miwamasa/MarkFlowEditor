@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Block, BlockType, TableData } from '../../types';
 import { useApp } from '../../contexts/AppContext';
+import { createDefaultTableData } from '../../utils/factories';
 import { EmbedBlock } from './EmbedBlock';
+import { TableEditor } from './TableEditor';
 
 interface BlockEditorProps {
   block: Block;
@@ -10,18 +12,50 @@ interface BlockEditorProps {
   onSelect: () => void;
 }
 
-export const BlockEditor: React.FC<BlockEditorProps> = ({ 
-  block, 
-  fileId, 
-  isSelected, 
-  onSelect 
+const HEADING_INPUT_STYLES: Partial<Record<BlockType, string>> = {
+  [BlockType.Heading1]: 'text-2xl font-bold',
+  [BlockType.Heading2]: 'text-xl font-bold',
+  [BlockType.Heading3]: 'text-lg font-bold'
+};
+
+const BLOCK_TYPE_OPTIONS = [
+  { type: BlockType.Heading1, label: '# Heading 1', icon: '📋' },
+  { type: BlockType.Heading2, label: '## Heading 2', icon: '📋' },
+  { type: BlockType.Heading3, label: '### Heading 3', icon: '📋' },
+  { type: BlockType.Paragraph, label: 'Paragraph', icon: '📄' },
+  { type: BlockType.UnorderedList, label: 'Bullet List', icon: '• ' },
+  { type: BlockType.OrderedList, label: 'Numbered List', icon: '1.' },
+  { type: BlockType.Code, label: 'Code Block', icon: '💻' },
+  { type: BlockType.Table, label: 'Table', icon: '📊' },
+  { type: BlockType.Quote, label: 'Quote', icon: '💬' },
+  { type: BlockType.Image, label: 'Image', icon: '🖼️' },
+  { type: BlockType.Link, label: 'Link', icon: '🔗' },
+];
+
+const SAMPLE_JSON_SCHEMA = JSON.stringify({
+  type: "object",
+  properties: {
+    title: { type: "string", description: "Document title" },
+    content: { type: "string", description: "Main content" },
+    tags: { type: "array", items: { type: "string" } }
+  },
+  required: ["title", "content"]
+}, null, 2);
+
+export const BlockEditor: React.FC<BlockEditorProps> = ({
+  block,
+  fileId,
+  isSelected,
+  onSelect
 }) => {
   const { state, actions } = useApp();
   const [showTypeSelector, setShowTypeSelector] = useState(false);
-  
+
   const currentFile = state.project.files.find(f => f.id === fileId);
   const currentBlockIndex = currentFile ? currentFile.blocks.findIndex(b => b.id === block.id) : -1;
   const totalBlocks = currentFile ? currentFile.blocks.length : 0;
+
+  const textContent = typeof block.content === 'string' ? block.content : '';
 
   const handleContentChange = (content: string) => {
     actions.updateBlock(fileId, block.id, { content });
@@ -54,66 +88,31 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
     }
   };
 
-  const handleTableContentChange = (tableData: TableData) => {
-    actions.updateBlock(fileId, block.id, { content: tableData });
-  };
-
-  const createDefaultTableData = (): TableData => ({
-    headers: ['Column 1', 'Column 2'],
-    rows: [
-      ['Cell 1', 'Cell 2'],
-      ['Cell 3', 'Cell 4']
-    ],
-    alignments: ['left', 'left']
-  });
-
   const renderBlockContent = () => {
     const baseClass = `w-full border-none outline-none bg-transparent ${
       isSelected ? 'ring-2 ring-blue-500' : ''
     }`;
     const handleClick = (e: React.MouseEvent) => e.stopPropagation();
+    const headingStyle = HEADING_INPUT_STYLES[block.type];
+
+    if (headingStyle) {
+      return (
+        <input
+          type="text"
+          value={textContent}
+          onChange={(e) => handleContentChange(e.target.value)}
+          placeholder="Enter heading..."
+          className={`${baseClass} ${headingStyle}`}
+          onClick={handleClick}
+        />
+      );
+    }
 
     switch (block.type) {
-      case BlockType.Heading1:
-        return (
-          <input
-            type="text"
-            value={typeof block.content === 'string' ? block.content : ''}
-            onChange={(e) => handleContentChange(e.target.value)}
-            placeholder="Enter heading..."
-            className={`${baseClass} text-2xl font-bold`}
-            onClick={handleClick}
-          />
-        );
-
-      case BlockType.Heading2:
-        return (
-          <input
-            type="text"
-            value={typeof block.content === 'string' ? block.content : ''}
-            onChange={(e) => handleContentChange(e.target.value)}
-            placeholder="Enter heading..."
-            className={`${baseClass} text-xl font-bold`}
-            onClick={handleClick}
-          />
-        );
-
-      case BlockType.Heading3:
-        return (
-          <input
-            type="text"
-            value={typeof block.content === 'string' ? block.content : ''}
-            onChange={(e) => handleContentChange(e.target.value)}
-            placeholder="Enter heading..."
-            className={`${baseClass} text-lg font-bold`}
-            onClick={handleClick}
-          />
-        );
-
       case BlockType.Paragraph:
         return (
           <textarea
-            value={typeof block.content === 'string' ? block.content : ''}
+            value={textContent}
             onChange={(e) => handleContentChange(e.target.value)}
             placeholder="Enter paragraph text..."
             className={`${baseClass} resize-none min-h-20`}
@@ -126,9 +125,9 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
       case BlockType.OrderedList:
         return (
           <textarea
-            value={typeof block.content === 'string' ? block.content : ''}
+            value={textContent}
             onChange={(e) => handleContentChange(e.target.value)}
-            placeholder={`Enter list items (one per line)...`}
+            placeholder="Enter list items (one per line)..."
             className={`${baseClass} resize-none min-h-24`}
             rows={4}
             onClick={handleClick}
@@ -139,7 +138,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
         return (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <textarea
-              value={typeof block.content === 'string' ? block.content : ''}
+              value={textContent}
               onChange={(e) => handleContentChange(e.target.value)}
               placeholder="Enter code..."
               className={`${baseClass} font-mono text-sm bg-gray-50 p-3 rounded border min-h-32`}
@@ -151,7 +150,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
       case BlockType.Quote:
         return (
           <textarea
-            value={typeof block.content === 'string' ? block.content : ''}
+            value={textContent}
             onChange={(e) => handleContentChange(e.target.value)}
             placeholder="Enter quote text..."
             className={`${baseClass} resize-none min-h-24 italic border-l-4 border-gray-300 pl-4`}
@@ -160,155 +159,32 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
           />
         );
 
-      case BlockType.Table:
-        const tableData = typeof block.content === 'object' && 'headers' in block.content 
-          ? block.content as TableData 
+      case BlockType.Table: {
+        const tableData = typeof block.content === 'object' && 'headers' in block.content
+          ? block.content as TableData
           : createDefaultTableData();
-          
         return (
-          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-            <div className="border border-gray-300 rounded overflow-hidden">
-              <table className="w-full">
-                {/* Headers */}
-                <thead className="bg-gray-50">
-                  <tr>
-                    {tableData.headers.map((header, colIndex) => (
-                      <th key={colIndex} className="border-b border-gray-300 p-2">
-                        <input
-                          type="text"
-                          value={header}
-                          onChange={(e) => {
-                            const newHeaders = [...tableData.headers];
-                            newHeaders[colIndex] = e.target.value;
-                            handleTableContentChange({
-                              ...tableData,
-                              headers: newHeaders
-                            });
-                          }}
-                          className="w-full bg-transparent outline-none font-medium"
-                          placeholder={`Header ${colIndex + 1}`}
-                        />
-                      </th>
-                    ))}
-                    <th className="border-b border-gray-300 p-2 w-16">
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={() => {
-                            const newHeaders = [...tableData.headers, `Column ${tableData.headers.length + 1}`];
-                            const newRows = tableData.rows.map(row => [...row, '']);
-                            const newAlignments: ('left' | 'center' | 'right')[] = [...(tableData.alignments || []), 'left'];
-                            handleTableContentChange({
-                              headers: newHeaders,
-                              rows: newRows,
-                              alignments: newAlignments
-                            });
-                          }}
-                          className="text-blue-600 hover:text-blue-800 text-sm"
-                          title="Add Column"
-                        >
-                          +
-                        </button>
-                        {tableData.headers.length > 1 && (
-                          <button
-                            onClick={() => {
-                              if (tableData.headers.length <= 1) return;
-                              const newHeaders = tableData.headers.slice(0, -1);
-                              const newRows = tableData.rows.map(row => row.slice(0, -1));
-                              const newAlignments: ('left' | 'center' | 'right')[] = (tableData.alignments || []).slice(0, -1);
-                              handleTableContentChange({
-                                headers: newHeaders,
-                                rows: newRows,
-                                alignments: newAlignments
-                              });
-                            }}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                            title="Remove Last Column"
-                          >
-                            -
-                          </button>
-                        )}
-                      </div>
-                    </th>
-                  </tr>
-                </thead>
-                {/* Rows */}
-                <tbody>
-                  {tableData.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {row.map((cell, colIndex) => (
-                        <td key={colIndex} className="border-b border-gray-200 p-2">
-                          <input
-                            type="text"
-                            value={cell}
-                            onChange={(e) => {
-                              const newRows = [...tableData.rows];
-                              newRows[rowIndex][colIndex] = e.target.value;
-                              handleTableContentChange({
-                                ...tableData,
-                                rows: newRows
-                              });
-                            }}
-                            className="w-full bg-transparent outline-none"
-                            placeholder={`Row ${rowIndex + 1}, Col ${colIndex + 1}`}
-                          />
-                        </td>
-                      ))}
-                      <td className="border-b border-gray-200 p-2 w-16">
-                        {tableData.rows.length > 1 && (
-                          <button
-                            onClick={() => {
-                              const newRows = tableData.rows.filter((_, i) => i !== rowIndex);
-                              handleTableContentChange({
-                                ...tableData,
-                                rows: newRows
-                              });
-                            }}
-                            className="text-red-600 hover:text-red-800 text-sm"
-                            title="Delete Row"
-                          >
-                            ×
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {/* Add Row Button */}
-                  <tr>
-                    <td colSpan={tableData.headers.length + 1} className="p-2">
-                      <button
-                        onClick={() => {
-                          const newRow = Array(tableData.headers.length).fill('');
-                          handleTableContentChange({
-                            ...tableData,
-                            rows: [...tableData.rows, newRow]
-                          });
-                        }}
-                        className="w-full text-blue-600 hover:text-blue-800 text-sm py-1 border-2 border-dashed border-blue-300 rounded hover:border-blue-500"
-                      >
-                        + Add Row
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <TableEditor
+            tableData={tableData}
+            onChange={(newTableData) => actions.updateBlock(fileId, block.id, { content: newTableData })}
+          />
         );
+      }
 
       case BlockType.Image:
         return (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <input
               type="text"
-              value={typeof block.content === 'string' ? block.content : ''}
+              value={textContent}
               onChange={(e) => handleContentChange(e.target.value)}
               placeholder="Enter image URL..."
               className={`${baseClass} p-2 border border-gray-300 rounded`}
             />
-            {typeof block.content === 'string' && block.content && (
+            {textContent && (
               <div className="mt-2 p-2 border border-gray-200 rounded bg-gray-50">
                 <img
-                  src={block.content}
+                  src={textContent}
                   alt="Preview"
                   className="max-w-full h-auto max-h-48 rounded"
                   onError={(e) => {
@@ -320,52 +196,48 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
           </div>
         );
 
-      case BlockType.Link:
+      case BlockType.Link: {
+        const [linkText = '', linkUrl = ''] = textContent.split('|');
         return (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
-                value={typeof block.content === 'string' ? block.content.split('|')[0] || '' : ''}
-                onChange={(e) => {
-                  const parts = typeof block.content === 'string' ? block.content.split('|') : ['', ''];
-                  handleContentChange(`${e.target.value}|${parts[1] || ''}`);
-                }}
+                value={linkText}
+                onChange={(e) => handleContentChange(`${e.target.value}|${linkUrl}`)}
                 placeholder="Link text..."
                 className={`${baseClass} p-2 border border-gray-300 rounded`}
               />
               <input
                 type="url"
-                value={typeof block.content === 'string' ? block.content.split('|')[1] || '' : ''}
-                onChange={(e) => {
-                  const parts = typeof block.content === 'string' ? block.content.split('|') : ['', ''];
-                  handleContentChange(`${parts[0] || ''}|${e.target.value}`);
-                }}
+                value={linkUrl}
+                onChange={(e) => handleContentChange(`${linkText}|${e.target.value}`)}
                 placeholder="URL..."
                 className={`${baseClass} p-2 border border-gray-300 rounded`}
               />
             </div>
-            {typeof block.content === 'string' && block.content.includes('|') && (
+            {textContent.includes('|') && (
               <div className="mt-2 p-2 border border-gray-200 rounded bg-gray-50">
                 <a
-                  href={block.content.split('|')[1]}
+                  href={linkUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 underline"
                 >
-                  {block.content.split('|')[0] || 'Link'}
+                  {linkText || 'Link'}
                 </a>
               </div>
             )}
           </div>
         );
+      }
 
       case BlockType.JsonSchema:
         return (
           <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
             <div className="text-sm font-medium text-gray-700 mb-2">JSON Schema Definition</div>
             <textarea
-              value={typeof block.content === 'string' ? block.content : ''}
+              value={textContent}
               onChange={(e) => handleContentChange(e.target.value)}
               placeholder="Enter JSON Schema definition..."
               className={`${baseClass} font-mono text-sm bg-gray-50 p-3 rounded border min-h-32`}
@@ -376,16 +248,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const sampleSchema = JSON.stringify({
-                    type: "object",
-                    properties: {
-                      title: { type: "string", description: "Document title" },
-                      content: { type: "string", description: "Main content" },
-                      tags: { type: "array", items: { type: "string" } }
-                    },
-                    required: ["title", "content"]
-                  }, null, 2);
-                  handleContentChange(sampleSchema);
+                  handleContentChange(SAMPLE_JSON_SCHEMA);
                 }}
                 className="text-blue-600 hover:text-blue-800 underline"
               >
@@ -403,9 +266,9 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
               <span className="text-xs text-gray-500">Read-only</span>
             </div>
             <div className="bg-blue-50 border border-blue-200 rounded p-3 min-h-24">
-              {typeof block.content === 'string' && block.content ? (
+              {textContent ? (
                 <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800">
-                  {block.content}
+                  {textContent}
                 </pre>
               ) : (
                 <div className="text-gray-500 italic">
@@ -454,6 +317,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
             onSelect={onSelect}
           />
         );
+
       default:
         return (
           <div className="text-gray-500 italic p-4 border-2 border-dashed border-gray-300 rounded">
@@ -462,20 +326,6 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
         );
     }
   };
-
-  const blockTypeOptions = [
-    { type: BlockType.Heading1, label: '# Heading 1', icon: '📋' },
-    { type: BlockType.Heading2, label: '## Heading 2', icon: '📋' },
-    { type: BlockType.Heading3, label: '### Heading 3', icon: '📋' },
-    { type: BlockType.Paragraph, label: 'Paragraph', icon: '📄' },
-    { type: BlockType.UnorderedList, label: 'Bullet List', icon: '• ' },
-    { type: BlockType.OrderedList, label: 'Numbered List', icon: '1.' },
-    { type: BlockType.Code, label: 'Code Block', icon: '💻' },
-    { type: BlockType.Table, label: 'Table', icon: '📊' },
-    { type: BlockType.Quote, label: 'Quote', icon: '💬' },
-    { type: BlockType.Image, label: 'Image', icon: '🖼️' },
-    { type: BlockType.Link, label: 'Link', icon: '🔗' },
-  ];
 
   return (
     <div
@@ -506,7 +356,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
                 <div className="p-2">
                   <div className="text-xs font-medium text-gray-500 mb-2">Change block type:</div>
                   <div className="space-y-1">
-                    {blockTypeOptions.map((option) => (
+                    {BLOCK_TYPE_OPTIONS.map((option) => (
                       <button
                         key={option.type}
                         onClick={(e) => {
@@ -544,10 +394,10 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
 
         {/* Block Controls */}
         <div className={`flex items-center space-x-1 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
-          <button 
+          <button
             className={`p-1 rounded hover:bg-white transition-colors ${
-              currentBlockIndex === 0 
-                ? 'text-gray-300 cursor-not-allowed' 
+              currentBlockIndex === 0
+                ? 'text-gray-300 cursor-not-allowed'
                 : 'text-gray-400 hover:text-gray-600'
             }`}
             title="Move Up"
@@ -559,10 +409,10 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
           >
             ↑
           </button>
-          <button 
+          <button
             className={`p-1 rounded hover:bg-white transition-colors ${
               currentBlockIndex === totalBlocks - 1
-                ? 'text-gray-300 cursor-not-allowed' 
+                ? 'text-gray-300 cursor-not-allowed'
                 : 'text-gray-400 hover:text-gray-600'
             }`}
             title="Move Down"
@@ -574,7 +424,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
           >
             ↓
           </button>
-          <button 
+          <button
             className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-white"
             title="Delete Block"
             onClick={(e) => {
